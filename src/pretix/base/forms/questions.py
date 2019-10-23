@@ -21,6 +21,9 @@ from django.utils.translation import (
 )
 from django_countries import countries
 from django_countries.fields import Country, CountryField
+from phonenumber_field.formfields import PhoneNumberField
+from phonenumber_field.phonenumber import PhoneNumber
+from phonenumber_field.widgets import PhoneNumberPrefixWidget
 
 from pretix.base.forms.widgets import (
     BusinessBooleanRadio, DatePickerWidget, SplitDateTimePickerWidget,
@@ -164,6 +167,15 @@ class NamePartsFormField(forms.MultiValueField):
         if self.require_all_fields and not all(v for v in value):
             raise forms.ValidationError(self.error_messages['incomplete'], code='required')
         return value
+
+
+class WrappedPhoneNumberPrefixWidget(PhoneNumberPrefixWidget):
+    def render(self, name, value, attrs=None, renderer=None):
+        output = super().render(name, value, attrs, renderer)
+        return mark_safe(self.format_output(output))
+
+    def format_output(self, rendered_widgets) -> str:
+        return '<div class="nameparts-form-group">%s</div>' % ''.join(rendered_widgets)
 
 
 class BaseQuestionsForm(forms.Form):
@@ -314,6 +326,13 @@ class BaseQuestionsForm(forms.Form):
                     help_text=help_text,
                     initial=dateutil.parser.parse(initial.answer).astimezone(tz) if initial and initial.answer else None,
                     widget=SplitDateTimePickerWidget(time_format=get_format_without_seconds('TIME_INPUT_FORMATS')),
+                )
+            elif q.type == Question.TYPE_PHONENUMBER:
+                field = PhoneNumberField(
+                    label=label, required=required,
+                    help_text=help_text,
+                    initial=PhoneNumber().from_string(initial.answer) if initial else None,
+                    widget=WrappedPhoneNumberPrefixWidget(),
                 )
             field.question = q
             if answers:
